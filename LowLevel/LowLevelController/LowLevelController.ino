@@ -128,29 +128,29 @@ ISR(TIMER1_COMPA_vect, ISR_NOBLOCK){ //timer1 interrupt occurs with 50hz frequen
 
   // Wait until all pins #4 #5 #6 #7 are LOW
   while(i) {
-      difference = micros() - loop_timer;
-      
-      if (difference >= pulse_length_esc4) {
-        PORTC &= 0b10111111;
-        i &= 0b00000111;
-      } 
-      if (difference >= pulse_length_esc3) {
-        PORTB &= 0b10111111;
-        i &= 0b00001011;
-      } 
-      if (difference >= pulse_length_esc2) {
-        PORTB &= 0b11011111;
-        i &= 0b00001101;
-      } 
-      if (difference >= pulse_length_esc1) {
-        PORTB &= 0b01111111;
-        i &= 0b00001110;
-      }
-      if(difference >= 2000) {
-         PORTB &= 0b00011111;
-         PORTC &= 0b10111111;
-         break;
-      }
+    difference = micros() - loop_timer;
+    
+    if (difference >= pulse_length_esc4) {
+      PORTC &= 0b10111111;
+      i &= 0b00000111;
+    } 
+    if (difference >= pulse_length_esc3) {
+      PORTB &= 0b10111111;
+      i &= 0b00001011;
+    } 
+    if (difference >= pulse_length_esc2) {
+      PORTB &= 0b11011111;
+      i &= 0b00001101;
+    } 
+    if (difference >= pulse_length_esc1) {
+      PORTB &= 0b01111111;
+      i &= 0b00001110;
+    }
+    if(difference >= 2000) {
+       PORTB &= 0b00011111;
+       PORTC &= 0b10111111;
+       break;
+    }
   }
 }
 
@@ -183,12 +183,12 @@ void pidController() {
   filteryaw.input(orientation.yaw);//Highpass filter = differentiator + lowpass
   filterpitch.input(orientation.pitch);//Highpass filter = differentiator + lowpass
   filterroll.input(orientation.roll);//Highpass filter = differentiator + lowpass
-  Euler3D delta = Euler3D(filterpitch.output(), filterroll.output(), filteryaw.output());
+  Vector3D delta = Vector3D(filterpitch.output(), filterroll.output(), filteryaw.output());
 
   // PID = e.Kp + ∫e.Ki + Δe.Kd
-  Euler3D pid = orientationError.componentMultiply(PITCHp, ROLLp, YAWp) + 
-                orientationErrorSUM.componentMultiply(PITCHi, ROLLi, YAWi) +
-                delta.componentMultiply(PITCHd, ROLLd, YAWd);
+  Vector3D pid = orientationError.componentMultiply(PITCHp, ROLLp, YAWp) + 
+                 orientationErrorSum.componentMultiply(PITCHi, ROLLi, YAWi) +
+                 delta.componentMultiply(PITCHd, ROLLd, YAWd);
 
   // Calculate pulse duration for each ESC
   pulse_length_esc1 = constrain(holdingthrottle + pid.roll + pid.pitch - pid.yaw, 1000, THROTTLE_LIMIT);

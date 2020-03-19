@@ -2,6 +2,17 @@
 
 #include <assert.h>
 
+float fixangle(float angle, float reference) {
+  float out = angle;
+  if(reference < angle) {
+    for(; abs(out-reference-360.0) < abs(out-reference); out -= 360.0);
+    return out;
+  } else {
+    for(; abs(out-reference+360.0) < abs(out-reference); out += 360.0);
+    return out;
+  }
+}
+
 struct Vector3D {
     union {float x, roll;};
     union {float y, pitch;};
@@ -141,14 +152,3 @@ struct Vector3D {
       Serial.println();
     }
 };
-
-float fixangle(float angle, float reference) {
-  float out = angle;
-  if(reference < angle) {
-    for(; abs(out-reference-360.0) < abs(out-reference); out -= 360.0);
-    return out;
-  } else {
-    for(; abs(out-reference+360.0) < abs(out-reference); out += 360.0);
-    return out;
-  }
-}
