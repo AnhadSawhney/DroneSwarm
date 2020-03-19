@@ -1,6 +1,7 @@
 #define __ASSERT_USE_STDERR
 
 #include <assert.h>
+#include <math.h>
 
 float fixangle(float angle, float reference) {
   float out = angle;
@@ -93,11 +94,11 @@ struct Vector3D {
       return *this;
     }
     
-    float dot_product(const Vector3D &v) { //scalar dot_product
+    float dot(const Vector3D &v) { //scalar dot_product
       return x*v.x+v.y*y+v.z*z;
     }
     
-    Vector3D cross_product(const Vector3D &v) {    //cross_product
+    Vector3D cross(const Vector3D &v) {    //cross_product
       return Vector3D(y*v.z-z*v.y, z*v.x-x*v.z, x*v.y-y*v.x);
     }
     
@@ -137,6 +138,21 @@ struct Vector3D {
        out.y = 2.0*((qx*qy+qz*qw)*x + (0.5-(qx*qx+qz*qz))*y + (qy*qz-qx*qw)*z);
        out.z = 2.0*((qx*qz-qy*qw)*x + (qy*qz+qx*qw)*y + (0.5-(qx*qx+qy*qy))*z);
        return out;
+    }
+
+    float scalarProject(Vector3D v) { //magnitude of projection of this onto v
+      return dot(v)/v.magnitude(); // ||this||*||v||*cos(theta)/||v||
+    }
+
+    Vector3D project(Vector3D v) { //project this onto v
+      return *this*dot(v)/v.square();
+    }
+
+    float toEuler(Vector3D v) {//sets this to euler angles, returns magnitude
+      float r = sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
+      roll = atan2(v.y, v.x) * 180.0/PI;
+      pitch = acos(v.z/r) * 180.0/PI;
+      return r;
     }
 
     void print() {
