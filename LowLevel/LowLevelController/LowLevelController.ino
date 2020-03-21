@@ -1,3 +1,4 @@
+#include <LinearRegression.h>
 #include <EEPROM.h>
 #include <Filters.h>
 #include <Wire.h>
@@ -34,7 +35,7 @@
 
 // ------------- Global variables used for PID controller --------------------
 Vector3D orientation, targetOrientation, orientationError, orientationErrorSum;
-Vector3D velocity = {0, 0, 0}, targetVelocity = {0, 0, 0};
+Vector3D velocity = {0, 0, 0}, targetVelocity = {0, 0, 0}, velocityOffset = {0, 0, 0};
 
 unsigned long timer1 = 0, timer2 = 0; 
 
@@ -46,13 +47,20 @@ uint16_t holdingThrottle,
 
 float throttleErrorSum = 0;
 
-//FilterOnePole filterx(HIGHPASS, 0.05);
-//FilterOnePole filtery(HIGHPASS, 0.05);
-//FilterOnePole filterz(HIGHPASS, 0.05);
+LinearRegression LrX = LinearRegression();
+LinearRegression LrY = LinearRegression();
+LinearRegression LrZ = LinearRegression();
+
+byte xreg = 1, yreg = 1, zreg = 1;
+
+
+FilterOnePole filterx(LOWPASS, 2);
+FilterOnePole filtery(LOWPASS, 2);
+FilterOnePole filterz(LOWPASS, 2);
 FilterOnePole filteryaw(HIGHPASS, 1);
 FilterOnePole filterpitch(HIGHPASS, 1);
 FilterOnePole filterroll(HIGHPASS, 1);
-//FilterOnePole filterthrottle(HIGHPASS, 1);
+FilterOnePole filterthrottle(HIGHPASS, 1);
 
 void setmotors(uint16_t pulse) {
   pulse_length_esc1 = pulse;
@@ -103,26 +111,97 @@ void IMU_linaccel() { //Absolute, based on north and gravity
   absAcc.y = 2.0*((x*y+z*w)*acc.x + (0.5-(x*x+z*z))*acc.y + (y*z-x*w)*acc.z);
   absAcc.z = 2.0*((x*z-y*w)*acc.x + (y*z+x*w)*acc.y + (0.5-(x*x+y*y))*acc.z);
 
-  float dt = (micros()-timer1)/1000000.0;
-  timer1 = micros();
+  unsigned long t = micros();
+  float dt = (t-timer1)/1000000.0;
+  timer1 = t;
   
   velocity += absAcc*dt;
 
-  //filterx.input(velocity.x);
-  //filtery.input(velocity.y);
-  //filterz.input(velocity.z);
+  Vector3D filteredVelocity = velocity;
 
-  Vector3D filteredVelocity = {filterx.output(), filtery.output(), filterz.output()};
+  if(abs(absAcc.x) < 0.3) { //no acceleration, assumes drone does not move with perfectly constant velocity
+    if(xreg == 0) { 
+      LrX.reset();
+    }
+    LrX.learn(t, velocity.x);  
+    if(xreg < 255) {
+      xreg++;
+    }
+  } else if(xreg > 0) {
+    xreg = 0;
+  }
 
-  absAcc.print();
-  Serial.print(" ");
-  velocity.println();
+  if(abs(absAcc.y) < 0.3) { //no acceleration, assumes drone does not move with perfectly constant velocity
+    if(yreg == 0) { 
+      LrY.reset();
+    }
+    LrY.learn(t, velocity.y);  
+    if(yreg < 255) {
+      yreg++;
+    }
+  } else if(yreg > 0) {
+    yreg = 0;
+  }
+
+  if(abs(absAcc.z) < 0.3) { //no acceleration, assumes drone does not move with perfectly constant velocity
+    if(zreg == 0) { 
+      LrZ.reset();
+    }
+    LrZ.learn(t, velocity.z);  
+    if(zreg < 255) { //increment zreg
+      zreg++;
+    }
+  } else if(zreg > 0) {
+    zreg = 0;
+  }
+
+
+  float temp = LrX.calculate(t);
+  if(!isnan(temp)) {
+    velocityOffset.x = temp;
+  }
+    
+  /*  Serial.print(temp);
+    Serial.print(" ");
+    Serial.print(0);
+  } else {
+    Serial.print(0);
+    Serial.print(" ");
+    Serial.print(velocityOffset.x);
+  }*/
   
-  //Serial.print(targetVelocity.scalarProject(filteredVelocity));
-  //Serial.print(" ");
-  //Serial.println(filteredVelocity.magnitude());
+  temp = LrY.calculate(t);
+  if(!isnan(temp)) {
+    velocityOffset.y = temp;
+  }
+  
+  temp = LrZ.calculate(t);
+  if(!isnan(temp)) {
+    velocityOffset.z = temp;
+  }
 
-  float error = targetVelocity.scalarProject(filteredVelocity) - filteredVelocity.magnitude();
+  filterx.input(velocityOffset.x);
+  filtery.input(velocityOffset.y);
+  filterz.input(velocityOffset.z);
+
+  filteredVelocity.x = velocity.x - filterx.output();
+  filteredVelocity.y = velocity.y - filtery.output();
+  filteredVelocity.z = velocity.z - filterz.output();
+
+  //filteredVelocity = velocity - velocityOffset;
+filterthrottle.input(velocity.x);
+  Serial.print(filteredVelocity.x);
+  Serial.print(" ");
+  Serial.println(filterthrottle.output());
+  
+
+  temp = filteredVelocity.magnitude();
+
+  if(filteredVelocity.z < 0) {
+    temp = -temp;
+  }
+
+  float error = targetVelocity.scalarProject(filteredVelocity) - temp;
   
   //THROTTLE PID:
 
@@ -131,6 +210,12 @@ void IMU_linaccel() { //Absolute, based on north and gravity
 
   // PID = e.Kp + ∫e.Ki + Δe.Kd
   holdingThrottle += error * THROTTLEp + throttleErrorSum * THROTTLEi + absAcc.magnitude()*THROTTLEd; //derivative of velocity is just acceleration
+
+  /*Serial.print(targetVelocity.scalarProject(filteredVelocity));
+  Serial.print(" ");
+  Serial.print(temp);
+  Serial.print(" ");
+  Serial.println(filterthrottle.output());*/
 }
 
 ISR(TIMER1_COMPA_vect, ISR_NOBLOCK){ //timer1 interrupt occurs with 50hz frequency, output motor pulses, must be nonblocking because micros is used
