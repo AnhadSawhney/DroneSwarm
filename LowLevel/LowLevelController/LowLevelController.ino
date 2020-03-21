@@ -12,35 +12,39 @@
 #include "IMUfunctions.h"
 #include "vectors.h"
 
-#define YAW      0
-#define ROLL     1
-#define PITCH    2
+#define YAWp 2.0
+#define PITCHp 1.0
+#define ROLLp 1.0
+#define THROTTLEp 1.0
 
-#define YAWp 0.0 //3.0
-#define PITCHp 2.0// 2.0
-#define ROLLp 0.0
-
-#define YAWi 0
+#define YAWi 0.4
 #define PITCHi 0
 #define ROLLi 0
+#define THROTTLEi 0.0
 
-#define YAWd 0.0 //-2.0
-#define PITCHd 2.0//must be positive
-#define ROLLd 0.0
+#define YAWd -4.0
+#define PITCHd -1 //small negative
+#define ROLLd -1//-3.0
+#define THROTTLEd 0.0
 
-#define holdingthrottle 1300 //should be 1400
-#define THROTTLE_LIMIT 2000
+#define PULSE_MIN 1000
+#define PULSE_MAX 2000
+
+//#define PRINTMOTORS
 
 // ------------- Global variables used for PID controller --------------------
-Vector3D orientation, orientationSetpoint, orientationError, orientationErrorSum, velocity;
+Vector3D orientation, targetOrientation, orientationError, orientationErrorSum;
+Vector3D velocity = {0, 0, 0}, targetVelocity = {0, 0, 0};
 
-unsigned long pulse_length_esc1,
-        pulse_length_esc2,
-        pulse_length_esc3,
-        pulse_length_esc4,
-        timer1 = 0, 
-        timer2 = 0; 
-        //timer3 = 0;
+unsigned long timer1 = 0, timer2 = 0; 
+
+uint16_t holdingThrottle, 
+         pulse_length_esc1,
+         pulse_length_esc2,
+         pulse_length_esc3,
+         pulse_length_esc4;
+
+float throttleErrorSum = 0;
 
 FilterOnePole filterx(HIGHPASS, 1);
 FilterOnePole filtery(HIGHPASS, 1);
@@ -48,6 +52,7 @@ FilterOnePole filterz(HIGHPASS, 1);
 FilterOnePole filteryaw(HIGHPASS, 1);
 FilterOnePole filterpitch(HIGHPASS, 1);
 FilterOnePole filterroll(HIGHPASS, 1);
+//FilterOnePole filterthrottle(HIGHPASS, 1);
 
 void setmotors(uint16_t pulse) {
   pulse_length_esc1 = pulse;
@@ -64,14 +69,12 @@ void IMU_euler() { //INPUT: PITCH YAW ROLL ABSOLUTE IN DEGREES
   orientation.yaw = fixangle(read16/16.00, orientation.yaw);
   orientation.roll = fixangle(read16/16.00, orientation.roll);
   orientation.pitch = fixangle(read16/16.00, orientation.pitch);
-  orientationSetpoint.fix(orientation);
-  orientationError = orientationSetpoint - orientation;
-  //Serial.println("Y R P");
-  //Serial.print(measures[PITCH]);
+  targetOrientation.fix(orientation);
+  orientationError = targetOrientation - orientation;
+  //Serial.println("Roll Pitch Yaw ORoll OPitch OYaw");
+  //orientation.print();
   //Serial.print(" ");
-  //Serial.println(instruction[PITCH]);
-  //Serial.print(" ");
-  //Serial.println(errors[PITCH]);
+  //targetOrientation.println();
 }
 
 /*  Undo rotation by quaternion
@@ -82,40 +85,52 @@ void IMU_euler() { //INPUT: PITCH YAW ROLL ABSOLUTE IN DEGREES
 
 void IMU_linaccel() { //Absolute, based on north and gravity
   Wire.beginTransmission(IMU);
-  Wire.write(0x28);
-  Wire.endTransmission(false);
-  Wire.requestFrom(IMU, 6, true);
-  Vector3D acc = Vector3D(read16/100.0, read16/100.0, read16/100.0); // m/s^2
-
-  Wire.beginTransmission(IMU);
   Wire.write(0x20);
   Wire.endTransmission(false);
-  Wire.requestFrom(IMU, 8, true);
-  acc = acc.quaternionRotate(read16/16384.0, read16/16384.0, read16/16384.0, read16/16384.0);
+  Wire.requestFrom(IMU, 14, true);
+  float w = read16/16384.0;
+  float x = read16/16384.0;
+  float y = read16/16384.0;
+  float z = read16/16384.0;
+  Vector3D acc;
+  acc.x = read16/100.0;
+  acc.y = read16/100.0;
+  acc.z = read16/100.0; // m/s^2
 
-  unsigned long t = micros();
-  float dt = (t-timer1)/1000000.0;
+  Vector3D absAcc;
   
-  if(timer1 = 0){
-    velocity = Vector3D();
-  } else {
-    velocity += acc*dt;
-  }
+  absAcc.x = 2.0*((0.5-(y*y+z*z))*acc.x + (x*y-z*w)*acc.y + (x*z+y*w)*acc.z);
+  absAcc.y = 2.0*((x*y+z*w)*acc.x + (0.5-(x*x+z*z))*acc.y + (y*z-x*w)*acc.z);
+  absAcc.z = 2.0*((x*z-y*w)*acc.x + (y*z+x*w)*acc.y + (0.5-(x*x+y*y))*acc.z);
+
+  float dt = (micros()-timer1)/1000000.0;
+  timer1 = micros();
   
+  velocity += absAcc*dt;
+
   filterx.input(velocity.x);
   filtery.input(velocity.y);
   filterz.input(velocity.z);
 
-  //Serial.println(dt);
+  Vector3D filteredVelocity = {filterx.output(), filtery.output(), filterz.output()};
+
+  //absAcc.print();
+  //Serial.print(" ");
+  filteredVelocity.println();
+
+  //Serial.print(targetVelocity.scalarProject(velocity));
+  //Serial.print(" ");
+  //Serial.println(velocity.magnitude());
+
+  float error = targetVelocity.scalarProject(velocity) - velocity.magnitude();
   
-  timer1 = t;
-  
-  //Serial.print(", ");
-  //Serial.print(filterx.output());
-  //Serial.print(",");
-  //Serial.print(filtery.output());
-  //Serial.print(",");
-  //Serial.println(filterz.output());
+  //THROTTLE PID:
+
+  // Calculate sum of errors : Integral coefficients
+  throttleErrorSum += error*dt;
+
+  // PID = e.Kp + ∫e.Ki + Δe.Kd
+  holdingThrottle += error * THROTTLEp + throttleErrorSum * THROTTLEi + absAcc.magnitude()*THROTTLEd; //derivative of velocity is just acceleration
 }
 
 ISR(TIMER1_COMPA_vect, ISR_NOBLOCK){ //timer1 interrupt occurs with 50hz frequency, output motor pulses, must be nonblocking because micros is used
@@ -146,7 +161,7 @@ ISR(TIMER1_COMPA_vect, ISR_NOBLOCK){ //timer1 interrupt occurs with 50hz frequen
       PORTB &= 0b01111111;
       i &= 0b00001110;
     }
-    if(difference >= 2000) {
+    if(difference >= PULSE_MAX) {
        PORTB &= 0b00011111;
        PORTC &= 0b10111111;
        break;
@@ -173,8 +188,8 @@ ISR(TIMER1_COMPA_vect, ISR_NOBLOCK){ //timer1 interrupt occurs with 50hz frequen
  */
 void pidController() {
   float a;
-  unsigned long t = micros();
-  float dt = (t-timer2)/1000000.0;
+  float dt = (micros()-timer2)/1000000.0;
+  timer2 = micros();
   
   // Calculate sum of errors : Integral coefficients
   orientationErrorSum += orientationError*dt;
@@ -183,18 +198,20 @@ void pidController() {
   filteryaw.input(orientation.yaw);//Highpass filter = differentiator + lowpass
   filterpitch.input(orientation.pitch);//Highpass filter = differentiator + lowpass
   filterroll.input(orientation.roll);//Highpass filter = differentiator + lowpass
-  Vector3D delta = Vector3D(filterpitch.output(), filterroll.output(), filteryaw.output());
+  Vector3D delta = {filterroll.output(), filterpitch.output(), filteryaw.output()};
 
   // PID = e.Kp + ∫e.Ki + Δe.Kd
-  Vector3D pid = orientationError.componentMultiply(PITCHp, ROLLp, YAWp) + 
-                 orientationErrorSum.componentMultiply(PITCHi, ROLLi, YAWi) +
-                 delta.componentMultiply(PITCHd, ROLLd, YAWd);
+  Vector3D pid = orientationError.componentMultiply(ROLLp, PITCHp, YAWp) + 
+                 orientationErrorSum.componentMultiply(ROLLi, PITCHi, YAWi) +
+                 delta.componentMultiply(ROLLd, PITCHd, YAWd);
 
   // Calculate pulse duration for each ESC
-  pulse_length_esc1 = constrain(holdingthrottle + pid.roll + pid.pitch - pid.yaw, 1000, THROTTLE_LIMIT);
-  pulse_length_esc2 = constrain(holdingthrottle + pid.roll - pid.pitch + pid.yaw, 1000, THROTTLE_LIMIT);
-  pulse_length_esc3 = constrain(holdingthrottle - pid.roll + pid.pitch + pid.yaw, 1000, THROTTLE_LIMIT);
-  pulse_length_esc4 = constrain(holdingthrottle - pid.roll - pid.pitch - pid.yaw, 1000, THROTTLE_LIMIT);
+  pulse_length_esc1 = constrain(holdingThrottle + pid.roll - pid.pitch - pid.yaw, PULSE_MIN, PULSE_MAX); 
+  pulse_length_esc2 = constrain(holdingThrottle + pid.roll + pid.pitch + pid.yaw, PULSE_MIN, PULSE_MAX); 
+  pulse_length_esc3 = constrain(holdingThrottle - pid.roll - pid.pitch + pid.yaw, PULSE_MIN, PULSE_MAX);
+  pulse_length_esc4 = constrain(holdingThrottle - pid.roll + pid.pitch - pid.yaw, PULSE_MIN, PULSE_MAX);
+
+#ifdef PRINTMOTORS
 
   Serial.println("M1 M2 M3 M4");
   Serial.print(pulse_length_esc1);
@@ -204,7 +221,8 @@ void pidController() {
   Serial.print(pulse_length_esc3);
   Serial.print(" ");
   Serial.println(pulse_length_esc4);
-  timer2 = t;
+
+#endif
 }
 
 void setup() {
@@ -267,17 +285,14 @@ void setup() {
   Wire.write(0x1A);  
   Wire.endTransmission(false);
   Wire.requestFrom(IMU, 6, true);
-  orientationSetpoint.yaw = fixangle(read16/16.00, orientationSetpoint.yaw);
-  orientationSetpoint.roll = fixangle(read16/16.00, orientationSetpoint.roll);
-  orientationSetpoint.pitch = fixangle(read16/16.00, orientationSetpoint.pitch);
+  targetOrientation.yaw = read16/16.00;
+  targetOrientation.roll = read16/16.00;
+  targetOrientation.pitch = read16/16.00;
   Serial.print("SETPOINTS (PITCH, ROLL, YAW): ");
-  orientationSetpoint.println();
+  targetOrientation.println();
   delay(100);
   LEDOFF;
 }
-
-unsigned long previousMillis = 0;
-byte calib;
 
 void loop() { //should run at 100hz
   unsigned long s = micros();
@@ -288,9 +303,7 @@ void loop() { //should run at 100hz
   s = micros()-s;
   
   //Serial.print("LOOP FREQENCY:"); Serial.println(1000000.0/s);
-  if(s < 10000) {
+  if(s < 10000) { //max loop frequency  = 100hz
     delayMicroseconds(s);
-  }/* else {
-    Serial.println("WARN: LOOP FREQENCY <100HZ");
-  }*/
+  }
 }

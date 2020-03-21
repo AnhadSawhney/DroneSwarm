@@ -128,16 +128,8 @@ struct Vector3D {
 
     void fix(Vector3D ref) {
       yaw = fixangle(yaw, ref.yaw);
-      roll = fixangle(roll, roll);
-      pitch = fixangle(pitch, pitch);
-    }
-
-    Vector3D quaternionRotate(float qw, float qx, float qy, float qz) {
-       Vector3D out;
-       out.x = 2.0*((0.5-(qy*qy+qz*qz))*x + (qx*qy-qz*qw)*y + (qx*qz+qy*qw)*z);
-       out.y = 2.0*((qx*qy+qz*qw)*x + (0.5-(qx*qx+qz*qz))*y + (qy*qz-qx*qw)*z);
-       out.z = 2.0*((qx*qz-qy*qw)*x + (qy*qz+qx*qw)*y + (0.5-(qx*qx+qy*qy))*z);
-       return out;
+      roll = fixangle(roll, ref.roll);
+      pitch = fixangle(pitch, ref.pitch);
     }
 
     float scalarProject(Vector3D v) { //magnitude of projection of this onto v
