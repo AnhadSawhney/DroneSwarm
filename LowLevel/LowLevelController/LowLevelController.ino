@@ -46,9 +46,9 @@ uint16_t holdingThrottle,
 
 float throttleErrorSum = 0;
 
-FilterOnePole filterx(HIGHPASS, 1);
-FilterOnePole filtery(HIGHPASS, 1);
-FilterOnePole filterz(HIGHPASS, 1);
+//FilterOnePole filterx(HIGHPASS, 0.05);
+//FilterOnePole filtery(HIGHPASS, 0.05);
+//FilterOnePole filterz(HIGHPASS, 0.05);
 FilterOnePole filteryaw(HIGHPASS, 1);
 FilterOnePole filterpitch(HIGHPASS, 1);
 FilterOnePole filterroll(HIGHPASS, 1);
@@ -108,21 +108,21 @@ void IMU_linaccel() { //Absolute, based on north and gravity
   
   velocity += absAcc*dt;
 
-  filterx.input(velocity.x);
-  filtery.input(velocity.y);
-  filterz.input(velocity.z);
+  //filterx.input(velocity.x);
+  //filtery.input(velocity.y);
+  //filterz.input(velocity.z);
 
   Vector3D filteredVelocity = {filterx.output(), filtery.output(), filterz.output()};
 
-  //absAcc.print();
+  absAcc.print();
+  Serial.print(" ");
+  velocity.println();
+  
+  //Serial.print(targetVelocity.scalarProject(filteredVelocity));
   //Serial.print(" ");
-  filteredVelocity.println();
+  //Serial.println(filteredVelocity.magnitude());
 
-  //Serial.print(targetVelocity.scalarProject(velocity));
-  //Serial.print(" ");
-  //Serial.println(velocity.magnitude());
-
-  float error = targetVelocity.scalarProject(velocity) - velocity.magnitude();
+  float error = targetVelocity.scalarProject(filteredVelocity) - filteredVelocity.magnitude();
   
   //THROTTLE PID:
 
