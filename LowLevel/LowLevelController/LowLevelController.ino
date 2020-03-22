@@ -13,23 +13,24 @@
 #include "IMUfunctions.h"
 #include "vectors.h"
 
-#define YAWp 2.0
-#define PITCHp 1.0
-#define ROLLp 1.0
-#define THROTTLEp 1.0
+#define YAWp 0.0//2.0
+#define PITCHp 0.0//1.0
+#define ROLLp 0.0//1.0
+#define THROTTLEp 100.0
 
-#define YAWi 0.4
+#define YAWi 0.0//0.4
 #define PITCHi 0
 #define ROLLi 0
 #define THROTTLEi 0.0
 
-#define YAWd -4.0
-#define PITCHd -1 //small negative
-#define ROLLd -1//-3.0
+#define YAWd 0.0//-4.0
+#define PITCHd 0.0//-1 //small negative
+#define ROLLd 0.0//-1
 #define THROTTLEd 0.0
 
 #define PULSE_MIN 1000
 #define PULSE_MAX 2000
+#define HOLDING_THROTTLE 1400
 
 //#define PRINTMOTORS
 
@@ -39,7 +40,7 @@ Vector3D velocity = {0, 0, 0}, targetVelocity = {0, 0, 0}, velocityOffset = {0, 
 
 unsigned long timer1 = 0, timer2 = 0; 
 
-uint16_t holdingThrottle, 
+uint16_t throttle, 
          pulse_length_esc1,
          pulse_length_esc2,
          pulse_length_esc3,
@@ -160,15 +161,6 @@ void IMU_linaccel() { //Absolute, based on north and gravity
   if(!isnan(temp)) {
     velocityOffset.x = temp;
   }
-    
-  /*  Serial.print(temp);
-    Serial.print(" ");
-    Serial.print(0);
-  } else {
-    Serial.print(0);
-    Serial.print(" ");
-    Serial.print(velocityOffset.x);
-  }*/
   
   temp = LrY.calculate(t);
   if(!isnan(temp)) {
@@ -179,20 +171,16 @@ void IMU_linaccel() { //Absolute, based on north and gravity
   if(!isnan(temp)) {
     velocityOffset.z = temp;
   }
-
-  filterx.input(velocityOffset.x);
-  filtery.input(velocityOffset.y);
-  filterz.input(velocityOffset.z);
-
-  filteredVelocity.x = velocity.x - filterx.output();
-  filteredVelocity.y = velocity.y - filtery.output();
-  filteredVelocity.z = velocity.z - filterz.output();
+  
+  filteredVelocity.x = velocity.x - filterx.input(velocityOffset.x);
+  filteredVelocity.y = velocity.y - filtery.input(velocityOffset.y);
+  filteredVelocity.z = velocity.z - filterz.input(velocityOffset.z);
 
   //filteredVelocity = velocity - velocityOffset;
-filterthrottle.input(velocity.x);
-  Serial.print(filteredVelocity.x);
-  Serial.print(" ");
-  Serial.println(filterthrottle.output());
+  //filterthrottle.input(velocity.x);
+  //Serial.print(filteredVelocity.x);
+  //Serial.print(" ");
+  //Serial.println(filterthrottle.output());
   
 
   temp = filteredVelocity.magnitude();
@@ -209,13 +197,13 @@ filterthrottle.input(velocity.x);
   throttleErrorSum += error*dt;
 
   // PID = e.Kp + ∫e.Ki + Δe.Kd
-  holdingThrottle += error * THROTTLEp + throttleErrorSum * THROTTLEi + absAcc.magnitude()*THROTTLEd; //derivative of velocity is just acceleration
+  throttle = constrain(HOLDING_THROTTLE + error * THROTTLEp + throttleErrorSum * THROTTLEi + absAcc.magnitude()*THROTTLEd, PULSE_MIN, PULSE_MAX); //derivative of velocity is just acceleration
 
-  /*Serial.print(targetVelocity.scalarProject(filteredVelocity));
-  Serial.print(" ");
-  Serial.print(temp);
-  Serial.print(" ");
-  Serial.println(filterthrottle.output());*/
+  //Serial.print(targetVelocity.scalarProject(filteredVelocity));
+  //Serial.print(" ");
+  //Serial.println(temp);
+  //Serial.print(" ");
+  Serial.println(throttle);
 }
 
 ISR(TIMER1_COMPA_vect, ISR_NOBLOCK){ //timer1 interrupt occurs with 50hz frequency, output motor pulses, must be nonblocking because micros is used
@@ -291,10 +279,10 @@ void pidController() {
                  delta.componentMultiply(ROLLd, PITCHd, YAWd);
 
   // Calculate pulse duration for each ESC
-  pulse_length_esc1 = constrain(holdingThrottle + pid.roll - pid.pitch - pid.yaw, PULSE_MIN, PULSE_MAX); 
-  pulse_length_esc2 = constrain(holdingThrottle + pid.roll + pid.pitch + pid.yaw, PULSE_MIN, PULSE_MAX); 
-  pulse_length_esc3 = constrain(holdingThrottle - pid.roll - pid.pitch + pid.yaw, PULSE_MIN, PULSE_MAX);
-  pulse_length_esc4 = constrain(holdingThrottle - pid.roll + pid.pitch - pid.yaw, PULSE_MIN, PULSE_MAX);
+  pulse_length_esc1 = constrain(throttle + pid.roll - pid.pitch - pid.yaw, PULSE_MIN, PULSE_MAX); 
+  pulse_length_esc2 = constrain(throttle + pid.roll + pid.pitch + pid.yaw, PULSE_MIN, PULSE_MAX); 
+  pulse_length_esc3 = constrain(throttle - pid.roll - pid.pitch + pid.yaw, PULSE_MIN, PULSE_MAX);
+  pulse_length_esc4 = constrain(throttle - pid.roll + pid.pitch - pid.yaw, PULSE_MIN, PULSE_MAX);
 
 #ifdef PRINTMOTORS
 
