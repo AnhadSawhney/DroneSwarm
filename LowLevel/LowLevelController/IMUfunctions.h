@@ -1,9 +1,9 @@
 #define IMU 0x28
 #define IMURST A0
 #define write8(reg, data) Wire.beginTransmission(IMU);Wire.write(reg);Wire.write(data);Wire.endTransmission(true)
-#define read16 (int16_t)(Wire.read()|Wire.read()<<8 )
+#define read16() (int16_t)(Wire.read()|Wire.read()<<8 )
 
-void IMU_waitforboot() { //wait for IMU boot, attempt to read and verify ID
+void IMU_waitforboot() { //wait for IMU boot, verify ID
   do {
     Wire.beginTransmission(IMU);
     Wire.write(0x00);
@@ -207,35 +207,35 @@ void IMU_rawdata() {
   Wire.requestFrom(IMU, 18, true);
   // Accelerometer
   Serial.print("ACC X=");
-  Serial.print(read16/100.00, 2); // m/s^2
+  Serial.print(read16()/100.00, 2); // m/s^2
   Serial.print(" Y=");
-  Serial.print(read16/100.00, 2); // m/s^2
+  Serial.print(read16()/100.00, 2); // m/s^2
   Serial.print(" Z=");
-  Serial.print(read16/100.00, 2); // m/s^2
+  Serial.print(read16()/100.00, 2); // m/s^2
   // Magnetometer
   Serial.print(" MAG X=");
-  Serial.print(read16/16.00, 2); // mT
+  Serial.print(read16()/16.00, 2); // mT
   Serial.print(" Y=");
-  Serial.print(read16/16.00, 2); // mT
+  Serial.print(read16()/16.00, 2); // mT
   Serial.print(" Z=");
-  Serial.print(read16/16.00, 2); // mT
+  Serial.print(read16()/16.00, 2); // mT
   // Gyroscope
   Serial.print(" GYR X=");
-  Serial.print(read16/16.00, 2); // deg/s
+  Serial.print(read16()/16.00, 2); // deg/s
   Serial.print(" Y=");
-  Serial.print(read16/16.00, 2); // deg/s
+  Serial.print(read16()/16.00, 2); // deg/s
   Serial.print(" Z=");
-  Serial.print(read16/16.00, 2); // deg/s
+  Serial.print(read16()/16.00, 2); // deg/s
   Wire.beginTransmission(IMU);
   Wire.write(0x1A);  
   Wire.endTransmission(false);
   Wire.requestFrom(IMU, 6, true);
   Serial.print(" Yaw=");
-  Serial.print(read16/16.00);
+  Serial.print(read16()/16.00);
   Serial.print(" Roll=");
-  Serial.print(read16/16.00);
+  Serial.print(read16()/16.00);
   Serial.print(" Pitch=");
-  Serial.println(read16/16.00);
+  Serial.println(read16()/16.00);
 }
 
 void IMU_EEPROMcalibrate() {
