@@ -1,3 +1,5 @@
+#include <Wire.h>
+
 #define BMP 0x76
 #define write8(reg, data) Wire.beginTransmission(BMP);Wire.write(reg);Wire.write(data);Wire.endTransmission(true)
 #define read16() (int16_t)(Wire.read()|Wire.read()<<8 )
@@ -32,6 +34,9 @@ void BMP_waitforboot() { //wait for IMU boot, verify ID
 // used in the calculations when taking measurements.
 
 void BMP_Init() {
+  Wire.setSDA(PB9);
+  Wire.setSCL(PB8);
+  Wire.begin();
   BMP_waitforboot();
   Wire.beginTransmission(BMP);
   Wire.write(0x88);

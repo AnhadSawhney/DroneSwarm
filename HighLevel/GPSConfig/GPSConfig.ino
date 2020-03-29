@@ -28,9 +28,9 @@ const long possibleBaudrates[] = {
     //4800L,
 };
 
-void setup()
-{
+void setup() {
     PC_SERIAL.begin(PC_BAUDRATE);
+    delay(2000);
     PC_SERIAL.println("Starting auto-configuration...");
 
     // Restore the receiver default configuration.

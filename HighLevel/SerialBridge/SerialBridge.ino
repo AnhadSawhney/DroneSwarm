@@ -1,5 +1,5 @@
-#define PC_BAUDRATE 9600
-#define GPS_BAUDRATE 9600
+#define PC_BAUDRATE 115200
+#define GPS_BAUDRATE 115200
 
 void setup() {
     Serial.begin(PC_BAUDRATE);
@@ -10,7 +10,7 @@ void setup() {
 void loop() {
     if (Serial1.available())
     {
-        Serial.write(Serial3.read());
+        Serial.write(Serial1.read());
     }
 
     if (Serial.available())

@@ -1,23 +1,16 @@
 #include <EEPROM.h>
 #include <Filters.h>
-#include <Wire.h>
-#include <SPI.h>
 
+#define LED PA1
 #include "Barometer.h"
-
-HardwareSerial Serial1(PA10, PA9);
-#define gpsPort Serial1
-#define GPS_PORT_NAME "Serial1"
-#define DEBUG_PORT Serial
+#include "MicroSD.h"
 
 void setup() {
-  Wire.setSDA(PB9);
-  Wire.setSCL(PB8);
-  Wire.begin();
   Serial.begin(115200);  //Setting the baudrate
   delay(2000);
   Serial.println("Start");
-  BMP_Init();
+  BMP_Init(); //also initializes I2C
+  SD_Init(); //also initializes SPI for MCU2
   pinMode(PA1, OUTPUT);
 }
 
