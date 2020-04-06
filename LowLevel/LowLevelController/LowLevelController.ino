@@ -236,7 +236,7 @@ void loop() { //should run at 100hz
   s = micros()-s;
   
   //Serial.print("LOOP FREQENCY:"); Serial.println(1000000.0/s);
-  if(s < 10000) { //max loop frequency  = 100hz
+  if(s < 10000) { //max loop frequency = 100hz
     delayMicroseconds(s);
   }
 }

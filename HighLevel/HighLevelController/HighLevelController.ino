@@ -10,17 +10,21 @@ void setup() {
   delay(2000);
   Serial.println("Start");
   BMP_Init(); //also initializes I2C
+  GPS_Init();
   SD_Init(); //also initializes SPI for MCU2
   pinMode(PA1, OUTPUT);
 }
 
-void loop() {
-  // put your main code here, to run repeatedly:
-  Serial.print(BMP_GetTemperature());
-  Serial.print(" ");
-  Serial.println(BMP_GetAltitude());
-  digitalWrite(PA1, 1);
-  delay(100);
-  digitalWrite(PA1, 0);
-  delay(100);
+void loop() { //should run at 250hz
+  unsigned long s = micros();
+  BMP_Everyloop();
+  GPS_Everyloop();
+  
+  
+  s = micros()-s;
+  
+  //Serial.print("LOOP FREQENCY:"); Serial.println(1000000.0/s);
+  if(s < 4000) { //max loop frequency = 250hz
+    delayMicroseconds(s);
+  }
 }
